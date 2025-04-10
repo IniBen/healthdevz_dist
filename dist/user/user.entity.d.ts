@@ -8,6 +8,7 @@ export declare class User {
     lastname: string;
     bio: string;
     city: string;
+    gender: string;
     address: string;
     phone: string;
     country: string;
