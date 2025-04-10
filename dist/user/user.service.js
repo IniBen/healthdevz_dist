@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const common_1 = require("@nestjs/common");
 const common_2 = require("@nestjs/common");
-const bcrypt = require("bcrypt");
 const email_service_1 = require("../infrastructure/Services/email.service.");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
@@ -23,6 +22,7 @@ const user_entity_1 = require("./user.entity");
 const generateCode_1 = require("../utilities/generateCode");
 const jwt_1 = require("@nestjs/jwt");
 const randomGenerator_1 = require("../utilities/randomGenerator");
+const crypto_1 = require("../utilities/crypto");
 let UserService = class UserService {
     usersRepo;
     jwtService;
@@ -44,9 +44,9 @@ let UserService = class UserService {
                 throw new common_2.HttpException("Email already exists.", common_2.HttpStatus.NOT_FOUND);
             }
             const generatedToken = (0, generateCode_1.generateConfirmationCode)();
-            const hash = await bcrypt.hash(req.password, 10);
+            const { hash, salt } = await (0, crypto_1.hashPassword)(req.password);
             const useridentity = (0, randomGenerator_1.generateGUID)();
-            const user = this.usersRepo.create({ email: req.email, id: useridentity, password: hash, token: generatedToken });
+            const user = this.usersRepo.create({ email: req.email, id: useridentity, password: hash, token: generatedToken, psalt: salt });
             this.usersRepo.save(user);
             console.log("User created successfully", user);
             const url = `${process.env.FRONTEND_BASE_URL}/Auth/Confirm?user=${user.id}&verify=${generatedToken}`;
@@ -71,27 +71,30 @@ let UserService = class UserService {
     async login(req, res) {
         const aResponse = {
             successful: false,
-            message: "",
-            data: ""
+            message: '',
+            data: '',
         };
         try {
             const user = await this.findByUsername(req.email);
             if (!user) {
-                throw new common_2.HttpException("User not found", common_2.HttpStatus.NOT_FOUND);
+                throw new common_2.HttpException('User not found', common_2.HttpStatus.NOT_FOUND);
             }
-            const isPasswordValid = await bcrypt.compare(req.password, user.password);
+            if (!user.psalt) {
+                throw new common_2.HttpException('User salt missing', common_2.HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            const isPasswordValid = await (0, crypto_1.verifyPassword)(req.password, user.password, user.psalt);
             if (!isPasswordValid) {
-                throw new common_2.HttpException("Invalid password", common_2.HttpStatus.UNAUTHORIZED);
+                throw new common_2.HttpException('Invalid password', common_2.HttpStatus.UNAUTHORIZED);
             }
             const payload = { email: user.email, sub: user.id };
             const token = this.jwtService.sign(payload);
             aResponse.data = token;
-            aResponse.message = "Login successful";
+            aResponse.message = 'Login successful';
             aResponse.successful = true;
             return aResponse;
         }
         catch (error) {
-            aResponse.message = error.message;
+            aResponse.message = error instanceof common_2.HttpException ? error.message : 'Login failed';
             aResponse.successful = false;
             return aResponse;
         }

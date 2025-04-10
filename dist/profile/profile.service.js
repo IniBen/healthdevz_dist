@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../user/user.entity");
 const jwt_1 = require("@nestjs/jwt");
+const onboarding_1 = require("../user/core/enum/onboarding");
 let ProfileService = class ProfileService {
     usersRepo;
     jwtService;
@@ -61,12 +62,13 @@ let ProfileService = class ProfileService {
             const updateprofile = {
                 firstname: req.firstname ?? user.firstname,
                 lastname: req.lastname ?? user.lastname,
-                onboardingLevel: req.onboardingLevel ?? user.onboardingLevel,
+                onboardingLevel: onboarding_1.OnboardingLevel.Completed,
                 role: req.role ?? user.role,
                 country: req.country ?? user.country,
                 city: req.city ?? user.city,
                 address: req.address ?? user.address,
                 phone: req.phone ?? user.phone,
+                bio: req.bio ?? user.bio
             };
             this.updateByUserId(userId, updateprofile);
             aResponse.data = "Profile updated successfully";

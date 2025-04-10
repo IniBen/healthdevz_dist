@@ -16,10 +16,11 @@ exports.IdentityService = void 0;
 const common_1 = require("@nestjs/common");
 const user_service_1 = require("../user/user.service");
 const jwt_1 = require("@nestjs/jwt");
-const bcrypt = require("bcrypt");
+const crypto_1 = require("../utilities/crypto");
 const typeorm_1 = require("typeorm");
 const typeorm_2 = require("@nestjs/typeorm");
 const user_entity_1 = require("../user/user.entity");
+const onboarding_1 = require("../user/core/enum/onboarding");
 let IdentityService = class IdentityService {
     usersRepo;
     usersService;
@@ -31,20 +32,29 @@ let IdentityService = class IdentityService {
     }
     async validateUser(req) {
         if (!req.email || !req.password) {
-            throw new common_1.HttpException("Email and password are required", common_1.HttpStatus.BAD_REQUEST);
+            throw new common_1.HttpException('Email and password are required', common_1.HttpStatus.BAD_REQUEST);
         }
         const user = await this.usersService.findByUsername(req.email);
         if (!user) {
-            throw new common_1.HttpException("no such user found", common_1.HttpStatus.BAD_REQUEST);
+            throw new common_1.HttpException('Invalid credentials', common_1.HttpStatus.UNAUTHORIZED);
         }
         if (!user.isVerified) {
-            throw new common_1.HttpException("Unverified User Email", common_1.HttpStatus.BAD_REQUEST);
+            throw new common_1.HttpException('Unverified user email', common_1.HttpStatus.FORBIDDEN);
         }
-        if (user && await bcrypt.compare(req.password, user.password)) {
-            const { password, ...result } = user;
-            return result;
+        if (!user.psalt) {
+            throw new common_1.HttpException('User salt missing', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        throw new common_1.HttpException("Invalid Credentials", common_1.HttpStatus.BAD_REQUEST);
+        try {
+            const isValid = await (0, crypto_1.verifyPassword)(req.password, user.password, user.psalt);
+            if (isValid) {
+                const { password, psalt, ...result } = user;
+                return result;
+            }
+            throw new common_1.HttpException('Invalid credentials', common_1.HttpStatus.UNAUTHORIZED);
+        }
+        catch (err) {
+            throw new common_1.HttpException('Password verification failed', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
     async login(user) {
         const payload = { email: user.email, sub: user.id };
@@ -87,6 +97,7 @@ let IdentityService = class IdentityService {
             }
             user.isVerified = true;
             usertoken.token = null;
+            user.onboardingLevel = onboarding_1.OnboardingLevel.Profile;
             await this.usersRepo.manager.transaction(async (transactionalEntityManager) => {
                 await transactionalEntityManager.save(user);
             });
